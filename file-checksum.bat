@@ -1,0 +1,3 @@
+@ECHO OFF
+SET SCRIPTPATH=%~dp0
+%SCRIPTPATH%/sha1sum.exe %1
