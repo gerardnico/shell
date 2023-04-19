@@ -106,7 +106,7 @@ if [ ! -f "$GITCS_CONF" ]; then
 fi
 IFS=$'\n' read -r -a REPO_DIRS -d $'\c0' < "$GITCS_CONF"
 
-echo "${#REPO_DIRS[*]} directory found.";
+echo "${#REPO_DIRS[*]} directory found in $GITCS_CONF";
 
 
 COMMAND=$1
@@ -141,7 +141,7 @@ for REPO_DIR in "${REPO_DIRS[@]}"; do
   pushd "$REPO_DIR" >/dev/null || checkStatus
   PWD=$(pwd)
   FQDN=${PWD##*/} # the directory name is the FQDN
-  echo "* ${FQDN^}"
+  echo "* ${FQDN^} ($PWD)"
   if ! (eval "${COMMAND_STRING}"); then
     echo_err "The command ${COMMAND_STRING} has error"
   fi
