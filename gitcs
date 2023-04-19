@@ -42,16 +42,39 @@ function checkStatus() {
 
 # As stated: https://git-scm.com/docs/git-ls-files#Documentation/git-ls-files.txt--t
 # for scripting: git status --porcelain
-# for user: git status --short
+# porcelain means give the output in an easy-to-parse format for scripts
 function gitStatus() {
   local vPorcelain
   vPorcelain=$(git status --porcelain)
   if [[ -z $vPorcelain ]]; then
     echo "No modifications"
   else
-    echo "$vPorcelain"
+    #  status tag which is followed by a space and then the filename
+    read -r -a fileStatusLine <<<"$vPorcelain"
+    fileStatus=${fileStatusLine[0]}
+    filePath=${fileStatusLine[1]}
+    echo "$fileStatus $filePath"
   fi
+}
 
+function gitCommit() {
+
+  if [[ -z $1 ]]; then
+    echo_err "A message is mandatory for a commit"
+    exit 1
+  fi
+  commitString="GIT_COMMITTER_NAME='beau.bytle.net' GIT_COMMITTER_EMAIL='support@combostrap.com' git commit --author 'Nico <nico@${FQDN}>' -m '$1'"
+  eval "$commitString"
+
+}
+
+function sync() {
+  (
+    cd /opt/www/bytle/farmer.bytle.net || exit 1
+    syncString="animal=${FQDN} php ./bin/plugin.php combo metadata-to-database --host ${FQDN} --port 80 /"
+    echo "$syncString"
+    eval "$syncString"
+  )
 }
 
 function gitStatusByFileType() {
@@ -92,6 +115,15 @@ status)
 statusg)
   COMMAND_STRING="git status ${ARG}"
   ;;
+commit)
+  COMMAND_STRING="gitCommit ${ARG}"
+  ;;
+commitg)
+  COMMAND_STRING="git commit ${ARG}"
+  ;;
+sync)
+  COMMAND_STRING="sync"
+  ;;
 *)
   COMMAND_STRING="git ${COMMAND} ${ARG}"
   ;;
@@ -100,14 +132,29 @@ esac
 for REPO_DIR in $REPO_DIRS; do
   pushd "$REPO_DIR" >/dev/null || checkStatus
   PWD=$(pwd)
-  LAST_NAME=${PWD##*/}
-  echo "* ${LAST_NAME^}"
+  FQDN=${PWD##*/} # the directory name is the FQDN
+  echo "* ${FQDN^}"
   if ! (eval "${COMMAND_STRING}"); then
     echo_err "The command ${COMMAND_STRING} has error"
   fi
   echo ""
   popd >/dev/null || checkStatus
 done
+
+if [[ ${COMMAND} == 'status' ]]; then
+  cat <<EOF
+--------------------------------------------------------------
+Legend File Status:
+H - tracked file that is not either unmerged or skip-worktree
+S - tracked file that is skip-worktree
+M - tracked file that is unmerged (in next commit)
+R - tracked file with unstaged removal/deletion
+C - tracked file with unstaged modification/change
+K - untracked paths which are part of file/directory conflicts which prevent checking out tracked files
+? - untracked file
+U - file with resolve-undo information
+EOF
+fi
 
 # problem between windows and linux path on the conf
 # update index
