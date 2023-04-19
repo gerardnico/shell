@@ -1,8 +1,7 @@
 #!/bin/bash
-# wrapper script around git to perform
-# the action to the set of repositories
-# add the directory path to your PATH variable
-# open it in WSH or SH and your good
+# Wrapper script around git to perform
+# synchronization action
+# for combo website repository
 
 CLI_NAME=$(basename "$0") # Name of the cli
 
@@ -20,11 +19,20 @@ function checkStatus() {
 }
 
 function gitStatus() {
-  output=$(git ls-files -m)
-  if [[ $output == "" ]]; then
-    echo 'No modification'
-  else
-    echo "$output"
+  modified=$(git ls-files -m)
+  if [[ -n $modified ]]; then
+    echo "Modified: $modified"
+  fi
+  deleted=$(git ls-files -d)
+  if [[ -n $deleted ]]; then
+    echo "Deleted: $deleted"
+  fi
+  untracked=$(git ls-files -o)
+  if [[ -n $untracked ]]; then
+    echo "Untracked/Added: $untracked"
+  fi
+  if [[ -z $modified && -z $deleted && -z $untracked ]]; then
+    echo "No modifications"
   fi
 }
 
@@ -44,6 +52,9 @@ echo ""
 case ${COMMAND} in
 status)
   COMMAND_STRING="gitStatus"
+  ;;
+status-git)
+  COMMAND_STRING="git status ${ARG}"
   ;;
 *)
   COMMAND_STRING="git ${ARG}"
