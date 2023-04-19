@@ -1,0 +1,80 @@
+#!/bin/bash
+# wrapper script around git to perform
+# the action to the set of repositories
+# add the directory path to your PATH variable
+# open it in WSH or SH and your good
+
+CLI_NAME=$(basename "$0") # Name of the cli
+
+function finish() {
+  printf "\nScript terminated\n"
+}
+trap finish EXIT
+
+function checkStatus() {
+  # shellcheck disable=SC2181
+  if [ "$?" -ne 0 ]; then
+    echo -e "\nLast command has failed."
+    exit 1
+  fi
+}
+
+function gitStatus() {
+  output=$(git ls-files -m)
+  if [[ $output == "" ]]; then
+    echo 'No modification'
+  else
+    echo "$output"
+  fi
+}
+
+# directory to checkout
+COMBOSTRAP_DIR='/opt/www/git/combostrap.com'
+ERALDY_DIR='/opt/www/git/eraldy.com'
+TABULIFY_DIR='/opt/www/git/tabulify.com'
+REPO_DIRS="$COMBOSTRAP_DIR $ERALDY_DIR $TABULIFY_DIR"
+
+COMMAND=$1
+shift
+ARG=$*
+echo
+echo "${CLI_NAME^} ${COMMAND^}"
+echo "-------------------------------------------"
+echo ""
+case ${COMMAND} in
+status)
+  COMMAND_STRING="gitStatus"
+  ;;
+*)
+  COMMAND_STRING="git ${ARG}"
+  ;;
+esac
+
+for REPO_DIR in $REPO_DIRS; do
+  pushd "$REPO_DIR" >/dev/null || checkStatus
+  PWD=$(pwd)
+  LAST_NAME=${PWD##*/}
+  echo "* ${LAST_NAME^}"
+  eval "${COMMAND_STRING}"
+  checkStatus
+  echo ""
+  popd >/dev/null || checkStatus
+done
+
+# problem between windows and linux path on the conf
+# update index
+#DOKUWIKI_DIR='../../..'
+#DOKUWIKI_HOME="$SCRIPT_DIR/$DOKUWIKI_DIR"
+#ANIMALS="combo.nico.lan nico.nico.lan tabulify.nico.lan"
+#pushd "$DOKUWIKI_HOME" > /dev/null || checkStatus;
+#PWD=$(pwd);
+#echo "Current directory: $PWD"
+#for ANIMAL in $ANIMALS;
+#do
+#    echo
+#    echo "Animal index $ANIMAL"
+#    export animal=ANIMAL
+#    /mnt/c/php-7.4.6-Win32-vc15-x64/php.exe ./bin/plugin.php combo metadata-to-database --host serverHostName --port 80 /
+#    checkStatus
+#done
+#popd > /dev/null || checkStatus;

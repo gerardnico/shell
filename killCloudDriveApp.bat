@@ -1,7 +1,7 @@
 REM kill all cloud drive
 
 REM Google Drive
-taskkill /F /IM googledrivesync.exe
+taskkill /F /IM GoogleDriveFs.exe
 
 REM Dropbox
 taskkill /F /IM Dropbox.exe
