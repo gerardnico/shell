@@ -1,0 +1,8 @@
+# Lf by default
+*   text=auto eol=lf
+*.csv    text eol=lf
+
+# Windows script
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+

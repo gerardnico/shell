@@ -95,11 +95,19 @@ function gitStatusByFileType() {
   fi
 }
 
-# directory to checkout
-COMBOSTRAP_DIR='/opt/www/git/combostrap.com'
-ERALDY_DIR='/opt/www/git/eraldy.com'
-TABULIFY_DIR='/opt/www/git/tabulify.com'
-REPO_DIRS="$COMBOSTRAP_DIR $ERALDY_DIR $TABULIFY_DIR"
+# Directory to checkout are in a config file
+if [ -z ${GITCS_HOME+x} ]; then
+  GITCS_HOME=$HOME
+fi
+GITCS_CONF=${GITCS_HOME}/gitcs.csv
+if [ ! -f "$GITCS_CONF" ]; then
+  echo_err "File $GITCS_CONF not found!"
+  exit 1
+fi
+IFS=$'\n' read -r -a REPO_DIRS -d $'\c0' < "$GITCS_CONF"
+
+echo "${#REPO_DIRS[*]} directory found.";
+
 
 COMMAND=$1
 shift
@@ -129,7 +137,7 @@ sync)
   ;;
 esac
 
-for REPO_DIR in $REPO_DIRS; do
+for REPO_DIR in "${REPO_DIRS[@]}"; do
   pushd "$REPO_DIR" >/dev/null || checkStatus
   PWD=$(pwd)
   FQDN=${PWD##*/} # the directory name is the FQDN
@@ -142,9 +150,11 @@ for REPO_DIR in $REPO_DIRS; do
 done
 
 if [[ ${COMMAND} == 'status' ]]; then
+  # As stated: https://git-scm.com/docs/git-ls-files#Documentation/git-ls-files.txt--t
   cat <<EOF
 --------------------------------------------------------------
 Legend File Status:
+A - untracked new file (in next commit)
 H - tracked file that is not either unmerged or skip-worktree
 S - tracked file that is skip-worktree
 M - tracked file that is unmerged (in next commit)
