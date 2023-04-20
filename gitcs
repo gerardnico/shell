@@ -44,6 +44,7 @@ function checkStatus() {
 # for scripting: git status --porcelain
 # porcelain means give the output in an easy-to-parse format for scripts
 function gitStatus() {
+
   local vPorcelain
   vPorcelain=$(git status --porcelain)
   if [[ -z $vPorcelain ]]; then
@@ -65,6 +66,10 @@ function gitStatus() {
       echo "$fileStatusLine$inNextCommit"
     done
   fi
+
+  remoteCommitToMerge=$(git rev-list HEAD..."$CURRENT_BRANCH_UPSTREAM" --count)
+  echo "There is $remoteCommitToMerge commits to merge."
+
 }
 
 # Cancel all modifications and start fresh
@@ -95,12 +100,19 @@ function gitAutoCommit() {
   for path in $(git diff-index --name-only HEAD); do
     files+=(" ${path##*/}")
   done
-  fileList=$(IFS=$', '; echo "${files[*]}")
+  fileList=$(
+    IFS=$', '
+    echo "${files[*]}"
+  )
   message="Update$fileList"
   echo "$message"
 
   # commit
   gitCommit "$message"
+
+  # push
+  checkStatus
+  git push
 
 }
 
@@ -132,13 +144,18 @@ function gitStatusByFileType() {
 }
 
 # Directory to checkout may be in a config file
-GITCS_CONF=${HOME}/gitcs.csv
-if [ -f "$GITCS_CONF" ]; then
-  echo "File $GITCS_CONF found"
-  IFS=$'\n' read -r -a REPO_DIRS -d $'\c0' <"$GITCS_CONF"
-  echo "${#REPO_DIRS[*]} directory found in $GITCS_CONF"
+# shellcheck disable=SC2070
+if [ -n "$GITCS_CONF" ]; then
+  echo "Environment GITCS_CONF found with the value $GITCS_CONF"
+  if [ -f "$GITCS_CONF" ]; then
+    IFS=$'\n' read -r -a REPO_DIRS -d $'\c0' <"$GITCS_CONF"
+    echo "${#REPO_DIRS[*]} directory found in $GITCS_CONF"
+  else
+    echo_err "$GITCS_CONF is not a file"
+    exit 1
+  fi
 else
-  echo "File $GITCS_CONF not found"
+  echo "Environment GITCS_CONF not found"
 fi
 
 # The root directory where all repository may be the children
@@ -202,6 +219,10 @@ for REPO_DIR in "${REPO_DIRS[@]}"; do
   PWD=$(pwd)
   FQDN=${PWD##*/} # the directory name is the FQDN
   echo "* ${FQDN^} ($PWD)"
+  CURRENT_BRANCH=$(git symbolic-ref HEAD --short)
+  echo "  * Branch: $CURRENT_BRANCH"
+  CURRENT_BRANCH_UPSTREAM=$(git rev-parse --abbrev-ref "$CURRENT_BRANCH@{u}")
+  echo "  * Upstream: $CURRENT_BRANCH_UPSTREAM"
   if ! (eval "${COMMAND_STRING}"); then
     echo_err "The command ${COMMAND_STRING} has error"
   fi
