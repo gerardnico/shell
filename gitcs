@@ -45,6 +45,15 @@ function checkStatus() {
 # porcelain means give the output in an easy-to-parse format for scripts
 function gitStatus() {
 
+  git fetch
+  upstreamCommitToMerge=$(git rev-list HEAD...'@{u}' --count)
+  localCommitToPush=$(git rev-list '@{u}'...HEAD --count)
+  echo "  * $upstreamCommitToMerge commits to merge"
+  echo "  * $localCommitToPush commits to push"
+  if [ "$upstreamCommitToMerge" != 0 ]; then
+    git merge '@{u}'
+  fi
+
   local vPorcelain
   vPorcelain=$(git status --porcelain)
   if [[ -z $vPorcelain ]]; then
@@ -66,9 +75,6 @@ function gitStatus() {
       echo "$fileStatusLine$inNextCommit"
     done
   fi
-
-  remoteCommitToMerge=$(git rev-list HEAD..."$CURRENT_BRANCH_UPSTREAM" --count)
-  echo "There is $remoteCommitToMerge commits to merge."
 
 }
 
@@ -179,7 +185,7 @@ shift
 ARG=$*
 
 if [ -z "$COMMAND" ]; then
-  echo_err 'A command is mandatory'
+  echo 'No command was given, status chosen.'
   COMMAND=status
 fi
 
@@ -221,7 +227,7 @@ for REPO_DIR in "${REPO_DIRS[@]}"; do
   echo "* ${FQDN^} ($PWD)"
   CURRENT_BRANCH=$(git symbolic-ref HEAD --short)
   echo "  * Branch: $CURRENT_BRANCH"
-  CURRENT_BRANCH_UPSTREAM=$(git rev-parse --abbrev-ref "$CURRENT_BRANCH@{u}")
+  CURRENT_BRANCH_UPSTREAM=$(git rev-parse --abbrev-ref "@{u}")
   echo "  * Upstream: $CURRENT_BRANCH_UPSTREAM"
   if ! (eval "${COMMAND_STRING}"); then
     echo_err "The command ${COMMAND_STRING} has error"
