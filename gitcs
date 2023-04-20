@@ -45,13 +45,18 @@ function checkStatus() {
 # porcelain means give the output in an easy-to-parse format for scripts
 function gitStatus() {
 
+  # Upstream
+  # When your local changes do not conflict with the changes in the upstream, a simple git pull will let you move forward.
   git fetch
   upstreamCommitToMerge=$(git rev-list HEAD...'@{u}' --count)
   localCommitToPush=$(git rev-list '@{u}'...HEAD --count)
   echo "  * $upstreamCommitToMerge commits to merge"
   echo "  * $localCommitToPush commits to push"
   if [ "$upstreamCommitToMerge" != 0 ]; then
+    # Before a merge to integrate the remote changes
+    git stash
     git merge '@{u}'
+    git stash pop
   fi
 
   local vPorcelain
@@ -79,7 +84,7 @@ function gitStatus() {
 }
 
 # Cancel all modifications and start fresh
-function gitFresh() {
+function gitResetAndClean() {
   git reset --hard
   git clean -f
 }
@@ -209,8 +214,8 @@ auto)
 commitg)
   COMMAND_STRING="git commit ${ARG}"
   ;;
-fresh)
-  COMMAND_STRING="gitFresh"
+restart)
+  COMMAND_STRING="gitResetAndClean"
   ;;
 sync)
   COMMAND_STRING="sync"
