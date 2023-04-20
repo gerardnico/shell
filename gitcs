@@ -49,14 +49,31 @@ function gitStatus() {
   if [[ -z $vPorcelain ]]; then
     echo "No modifications"
   else
-    #  status tag which is followed by a space and then the filename
-    read -r -a fileStatusLine <<<"$vPorcelain"
-    fileStatus=${fileStatusLine[0]}
-    filePath=${fileStatusLine[1]}
-    echo "$fileStatus $filePath"
+    # output:
+    # for an unstaged file: `status space path`
+    # for a staged file: `status space space path`
+    echo "$vPorcelain" | while read -r fileStatusLine; do
+      # fileStatus=${fileStatusLine:0:1} # not yet used
+      fileStatusStaged=${fileStatusLine:1:2}
+      if [ "${fileStatusStaged}" == '  ' ]; then
+        inNextCommit=' (staged)'
+        # filePath=${fileStatusLine:3} # not yet used
+      else
+        inNextCommit=' (unstaged)'
+        # filePath=${fileStatusLine:2} # not yet used
+      fi
+      echo "$fileStatusLine$inNextCommit"
+    done
   fi
 }
 
+# Cancel all modifications and start fresh
+function gitFresh() {
+  git reset --hard
+  git clean -f
+}
+
+# when there is nothing to commit, they say `working directory clean`
 function gitCommit() {
 
   if [[ -z $1 ]]; then
@@ -65,6 +82,25 @@ function gitCommit() {
   fi
   commitString="GIT_COMMITTER_NAME='beau.bytle.net' GIT_COMMITTER_EMAIL='support@combostrap.com' git commit --author 'Nico <nico@${FQDN}>' -m '$1'"
   eval "$commitString"
+
+}
+
+function gitAutoCommit() {
+
+  # staged all changes
+  git add -A
+
+  # commit message
+  declare -a files
+  for path in $(git diff-index --name-only HEAD); do
+    files+=(" ${path##*/}")
+  done
+  fileList=$(IFS=$', '; echo "${files[*]}")
+  message="Update$fileList"
+  echo "$message"
+
+  # commit
+  gitCommit "$message"
 
 }
 
@@ -95,23 +131,41 @@ function gitStatusByFileType() {
   fi
 }
 
-# Directory to checkout are in a config file
-if [ -z ${GITCS_HOME+x} ]; then
-  GITCS_HOME=$HOME
+# Directory to checkout may be in a config file
+GITCS_CONF=${HOME}/gitcs.csv
+if [ -f "$GITCS_CONF" ]; then
+  echo "File $GITCS_CONF found"
+  IFS=$'\n' read -r -a REPO_DIRS -d $'\c0' <"$GITCS_CONF"
+  echo "${#REPO_DIRS[*]} directory found in $GITCS_CONF"
+else
+  echo "File $GITCS_CONF not found"
 fi
-GITCS_CONF=${GITCS_HOME}/gitcs.csv
-if [ ! -f "$GITCS_CONF" ]; then
-  echo_err "File $GITCS_CONF not found!"
+
+# The root directory where all repository may be the children
+if [[ -n ${GITCS_HOME+x} ]]; then
+  for childPath in "$GITCS_HOME"/*; do
+    if [ -d "$childPath" ]; then
+      REPO_DIRS+=("$childPath")
+    fi
+  done
+else
+  echo "GITCS_HOME environment not found"
+fi
+
+if [ ${#REPO_DIRS[*]} == 0 ]; then
+  echo_err 'No Git repository directory found'
   exit 1
 fi
-IFS=$'\n' read -r -a REPO_DIRS -d $'\c0' < "$GITCS_CONF"
-
-echo "${#REPO_DIRS[*]} directory found in $GITCS_CONF";
-
 
 COMMAND=$1
 shift
 ARG=$*
+
+if [ -z "$COMMAND" ]; then
+  echo_err 'A command is mandatory'
+  COMMAND=status
+fi
+
 echo
 echo "${CLI_NAME^} ${COMMAND^}"
 echo "-------------------------------------------"
@@ -126,8 +180,14 @@ statusg)
 commit)
   COMMAND_STRING="gitCommit ${ARG}"
   ;;
+auto)
+  COMMAND_STRING="gitAutoCommit ${ARG}"
+  ;;
 commitg)
   COMMAND_STRING="git commit ${ARG}"
+  ;;
+fresh)
+  COMMAND_STRING="gitFresh"
   ;;
 sync)
   COMMAND_STRING="sync"
@@ -154,10 +214,10 @@ if [[ ${COMMAND} == 'status' ]]; then
   cat <<EOF
 --------------------------------------------------------------
 Legend File Status:
-A - untracked new file (in next commit)
+A - untracked new file (staged, in next commit)
 H - tracked file that is not either unmerged or skip-worktree
 S - tracked file that is skip-worktree
-M - tracked file that is unmerged (in next commit)
+M - tracked file that is unmerged (may be or not staged, ie in the next commit)
 R - tracked file with unstaged removal/deletion
 C - tracked file with unstaged modification/change
 K - untracked paths which are part of file/directory conflicts which prevent checking out tracked files
