@@ -41,8 +41,9 @@ function checkStatus() {
   fi
 }
 
-# Integrate the change
-function gitIntegrate() {
+# Integrate the changes
+# AutoPull to stay in the same fashion than AutoCommit
+function gitAutoPull() {
 
   git fetch
   upstreamCommitToMerge=$(git rev-list HEAD...'@{u}' --count)
@@ -217,13 +218,10 @@ status)
   COMMAND_STRING="gitStatus"
   ;;
 autopull)
-  COMMAND_STRING="gitIntegrate"
+  COMMAND_STRING="gitAutoPull"
   ;;
 statusg)
   COMMAND_STRING="git status ${ARG}"
-  ;;
-integrate)
-  COMMAND_STRING="gitIntegrate ${ARG}"
   ;;
 autocommit)
   COMMAND_STRING="gitAutoCommit ${ARG}"
