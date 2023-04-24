@@ -34,31 +34,45 @@ function echo_err() {
 }
 
 function checkStatus() {
+  # shellcheck disable=SC2181
   if [ "$?" -ne 0 ]; then
     echo -e "\nLast command has failed."
     exit 1
   fi
 }
 
-# As stated: https://git-scm.com/docs/git-ls-files#Documentation/git-ls-files.txt--t
-# for scripting: git status --porcelain
-# porcelain means give the output in an easy-to-parse format for scripts
+# Integrate the change
+function gitIntegrate() {
+
+  git fetch
+  upstreamCommitToMerge=$(git rev-list HEAD...'@{u}' --count)
+
+  echo "Integrating $upstreamCommitToMerge commits from $CURRENT_BRANCH_UPSTREAM into $CURRENT_BRANCH"
+  if [ "$upstreamCommitToMerge" != 0 ]; then
+    # Stash before a merge to integrate the remote changes
+    # To avoid the error: Please commit your changes or stash them before you merge.
+    #
+    # Note that when the local changes do not conflict with the changes in the upstream,
+    # a simple git pull let you move forward but how do we know that ?
+    #
+    git stash
+    git merge '@{u}'
+    git stash pop # do a merge
+  fi
+
+}
+
 function gitStatus() {
 
   # Upstream
-  # When your local changes do not conflict with the changes in the upstream, a simple git pull will let you move forward.
   git fetch
   upstreamCommitToMerge=$(git rev-list HEAD...'@{u}' --count)
   localCommitToPush=$(git rev-list '@{u}'...HEAD --count)
   echo "  * $upstreamCommitToMerge commits to merge"
   echo "  * $localCommitToPush commits to push"
-  if [ "$upstreamCommitToMerge" != 0 ]; then
-    # Before a merge to integrate the remote changes
-    git stash
-    git merge '@{u}'
-    git stash pop
-  fi
 
+  # for scripting: git status --porcelain
+  # porcelain means give the output in an easy-to-parse format for scripts
   local vPorcelain
   vPorcelain=$(git status --porcelain)
   if [[ -z $vPorcelain ]]; then
@@ -202,16 +216,19 @@ case ${COMMAND} in
 status)
   COMMAND_STRING="gitStatus"
   ;;
+autopull)
+  COMMAND_STRING="gitIntegrate"
+  ;;
 statusg)
   COMMAND_STRING="git status ${ARG}"
   ;;
-commit)
-  COMMAND_STRING="gitCommit ${ARG}"
+integrate)
+  COMMAND_STRING="gitIntegrate ${ARG}"
   ;;
-auto)
+autocommit)
   COMMAND_STRING="gitAutoCommit ${ARG}"
   ;;
-commitg)
+commit)
   COMMAND_STRING="git commit ${ARG}"
   ;;
 restart)
