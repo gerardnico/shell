@@ -105,7 +105,7 @@ function gitResetAndClean() {
 }
 
 # when there is nothing to commit, they say `working directory clean`
-function gitCommit() {
+function gitAutoCommit() {
 
   if [[ -z $1 ]]; then
     echo_err "A message is mandatory for a commit"
@@ -116,7 +116,7 @@ function gitCommit() {
 
 }
 
-function gitAutoCommit() {
+function gitAutoPush() {
 
   # staged all changes
   git add -A
@@ -134,7 +134,7 @@ function gitAutoCommit() {
   echo "$message"
 
   # commit
-  gitCommit "$message"
+  gitAutoCommit "$message"
 
   # push
   checkStatus
@@ -223,8 +223,8 @@ autopull)
 statusg)
   COMMAND_STRING="git status ${ARG}"
   ;;
-autocommit)
-  COMMAND_STRING="gitAutoCommit ${ARG}"
+autopush)
+  COMMAND_STRING="gitAutoPush ${ARG}"
   ;;
 commit)
   COMMAND_STRING="git commit ${ARG}"
