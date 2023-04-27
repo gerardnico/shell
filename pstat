@@ -68,12 +68,13 @@ function instantReport() {
   IFS=$'\n'
   json=$(curl -s 'http://localhost/php-status?full&json');
   echo "$output" | while IFS=" " read -r pid cpu mem; do
+    # extract the state and the request uri
+    # --raw-output is to delete the quotes of the string created at the end of the jq pipeline with jq string interpolation
     phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid) | \"\(.\"state\") \(.\"request uri\")\"")
-    read -r state request <<< "$phpStatus"
-    echo "$pid $cpu $mem $state $request"
+    read -r state requestUri <<< "$phpStatus"
+    echo "$pid $cpu $mem $state $requestUri"
     cpu=$(printf "%.0f" "$cpu") # to integer
     mem=$(printf "%.0f" "$mem") # to integer
-    # https://stackoverflow.com/questions/15023540/how-to-determine-which-script-is-being-executed-in-php-fpm-process
   done
   IFS=$OLD_IFS
 }
