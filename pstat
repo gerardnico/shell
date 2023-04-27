@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# need the systat package for pidstat
+# yum install sysstat -y
+
+if [ -z ${1+x} ]; then
+  processName="php-fpm"
+else
+  processName="$1"
+fi
+
+echo "List of $processName processes"
+
+# CPU_Util = (user+system+nice+softirq+steal)/ (user+system+nice+softirq+steal+idle+iowait)
+# see also mpstat
+totalCpu=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+echo "Total Cpu: ${totalCpu}"
+
+# Average
+frequency=1 # in sec
+period=3    # in sec
+
+# get the pid of php-fpm processes
+IFS=' ' read -r -a processes <<<"$(pidof "$processName")"
+echo "Total process: ${#processes[*]}"
+for i in "${!processes[@]}"; do
+  pid=${processes[$i]}
+  averageCpu=$(pidstat -p "$pid" -l $frequency $period | grep Average | awk '{print $7}')
+  averageCpuInt=$( printf "%.0f" "$averageCpu" )
+  shouldKill=live
+  if [[ averageCpuInt -gt 30 ]]; then
+    shouldKill=dead
+  fi
+  printf "%s - %s - %s - %s\n" "$i" "$pid" "$averageCpu" "$shouldKill"
+done
