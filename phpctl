@@ -65,6 +65,9 @@ function killPhpFpm() {
 
   report=$(infoReport "$pid")
   kill -9 "$pid"
+  # note: in cron, the output is send to the user
+  # We could therefore not use the mail command
+  # but a cron mode
   echo -e "The php-fpm $pid was killed\n$report" | mail -s "$subject" root
 
 }
