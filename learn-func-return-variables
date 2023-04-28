@@ -1,0 +1,10 @@
+#!/bin/bash
+
+function return2Variables(){
+   echo "value1 value2"
+}
+
+returnValue=$(return2Variables)
+read -r variable1 variable2 <<< "$returnValue"
+echo "The variable 1 value is: $variable1"
+echo "The variable 2 value is: $variable2"

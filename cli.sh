@@ -124,11 +124,11 @@ echo_log ""
 
 MODULE=$1
 shift
-MODULE_ARGS=$*
 
 case ${MODULE} in
 hello)
-  hello_module ${MODULE_ARGS}
+  # $@ preserve from word splitting
+  hello_module "$@"
   ;;
 *)
   echo_err "Module (${MODULE}) is unknown."
