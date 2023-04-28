@@ -116,7 +116,19 @@ function gitAutoCommit() {
 
 }
 
+
+# ! [rejected]        master -> master (non-fast-forward)
+#error: failed to push some refs to 'https://gerardnico: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@github.com/ComboStrap/website'
+#hint: Updates were rejected because the tip of your current branch is behind
+#hint: its remote counterpart. Merge the remote changes (e.g. 'git pull')
+#hint: before pushing again.
+#hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+
 function gitAutoPush() {
+
+  # pull to avoid
+  # `Updates were rejected because the tip of your current branch is behind`
+  git pull
 
   # staged all changes
   git add -A
@@ -202,7 +214,6 @@ fi
 
 COMMAND=$1
 shift
-ARG=$*
 
 if [ -z "$COMMAND" ]; then
   echo 'No command was given, status chosen.'
@@ -221,13 +232,13 @@ autopull)
   COMMAND_STRING="gitAutoPull"
   ;;
 statusg)
-  COMMAND_STRING="git status ${ARG}"
+  COMMAND_STRING="git status"
   ;;
 autopush)
-  COMMAND_STRING="gitAutoPush ${ARG}"
+  COMMAND_STRING="gitAutoPush"
   ;;
 commit)
-  COMMAND_STRING="git commit ${ARG}"
+  COMMAND_STRING="git commit"
   ;;
 restart)
   COMMAND_STRING="gitResetAndClean"
@@ -236,7 +247,7 @@ sync)
   COMMAND_STRING="sync"
   ;;
 *)
-  COMMAND_STRING="git ${COMMAND} ${ARG}"
+  COMMAND_STRING="git ${COMMAND}"
   ;;
 esac
 
@@ -249,7 +260,7 @@ for REPO_DIR in "${REPO_DIRS[@]}"; do
   echo "  * Branch: $CURRENT_BRANCH"
   CURRENT_BRANCH_UPSTREAM=$(git rev-parse --abbrev-ref "@{u}")
   echo "  * Upstream: $CURRENT_BRANCH_UPSTREAM"
-  if ! (eval "${COMMAND_STRING}"); then
+  if ! (eval "${COMMAND_STRING}" "$@"); then
     echo_err "The command ${COMMAND_STRING} has error"
   fi
   echo ""

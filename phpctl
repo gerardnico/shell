@@ -98,13 +98,13 @@ function statReport() {
 }
 
 function getPhpStatusData() {
-  if [ -z "$1" ]; then
-    echo_err 'The Pid should be given as first argument'
-    exit 1
-  fi
-  pid=$1
   json=$(curl -s 'http://localhost/php-status?full&json')
-  phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid)")
+  if [ -z "$1" ]; then
+    phpStatus=$(echo "$json" | jq --raw-output ".processes[]")
+  else
+    pid=$1
+    phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid)")
+  fi
   echo "$phpStatus"
 }
 
@@ -165,6 +165,33 @@ function instantOs() {
 
 }
 
+function killAll() {
+
+  echo "List of $processName processes"
+
+  output=$(top -b -n 1 | grep "php-fpm" | awk '{print $1,$9,$10}')
+  OLD_IFS=$IFS
+  IFS=$'\n'
+  counter=0
+  mainPid=$(systemctl show -p MainPID php-fpm | awk -F= '{print $2}')
+  json=$(curl -s 'http://localhost/php-status?full&json')
+  while IFS=" " read -r pid cpu mem; do
+
+    phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid) | \"\(.\"state\") \(.\"request uri\")\"")
+    IFS=" " read -r state requestUri <<<"$phpStatus"
+    if [ "$pid" != "$mainPid" ]; then
+      if [ "$state" == "Running" ]; then
+        extraSubject="$pid (Origin: stat, Cpu: $cpu, Mem: $mem)"
+        killPhpFpm "$pid" "$extraSubject"
+      fi
+
+    fi
+
+  done <<<"$output"
+  IFS=$OLD_IFS
+
+}
+
 function monitor() {
 
   continuous=once
@@ -177,7 +204,7 @@ function monitor() {
 
     if [[ $totalMemory -gt 90 ]]; then
       echo "Total Memory critical ($totalMemory), killing"
-      statReport 'kill'
+      killAll
     else
       echo "Total Memory ($totalMemory) not critical"
       if [[ $continuous != 'loop' ]]; then
@@ -244,6 +271,10 @@ info)
 kill)
   # shellcheck disable=SC2086
   killPhpFpm "$@"
+  ;;
+killAll)
+  # shellcheck disable=SC2086
+  killAll
   ;;
 help)
   print_usage
