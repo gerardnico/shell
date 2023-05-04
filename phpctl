@@ -184,7 +184,6 @@ function killAll() {
         extraSubject="$pid (Origin: stat, Cpu: $cpu, Mem: $mem)"
         killPhpFpm "$pid" "$extraSubject"
       fi
-
     fi
 
   done <<<"$output"
@@ -198,15 +197,22 @@ function monitor() {
   if [ -n "$1" ]; then
     continuous=$1
   fi
+  type='summary'
+  if [ -n "$2" ]; then
+    type=$2
+  fi
   while :; do
 
     read -r totalCpu totalMemory <<<"$(getOsData)"
 
-    if [[ $totalMemory -gt 90 ]]; then
+    if [[ $totalMemory -gt 80 ]]; then
       echo "Total Memory critical ($totalMemory), killing"
       killAll
     else
       echo "Total Memory ($totalMemory) not critical"
+      if [ "$type" == 'list' ]; then
+        listReport
+      fi
       if [[ $continuous != 'loop' ]]; then
         echo "Not a continuous monitoring ($continuous), break"
         break
@@ -214,6 +220,9 @@ function monitor() {
       sleep=5
       echo "  $continuous, sleeping $sleep"
       sleep $sleep
+      if [ "$type" == 'list' ]; then
+        clear
+      fi
     fi
   done
 
@@ -230,7 +239,7 @@ function print_usage() {
   echo "     * ls - list the processes"
   echo "     * info \$pid - list the info for the pid \$pid"
   echo "     * kill \$pid [subject]- kill the pid \$pid and send an email to root"
-  echo "     * monitor [loop] - monitor the os and kill if necessary (run once or in loop)"
+  echo "     * monitor [loop|once] [summary|list] - monitor the os and kill if necessary (run once or in loop, show a summary or a list)"
   echo "     * stat [kill] - returns average Cpu and memory over the last 3 seconds. Kill if needed"
 
   echo ""
