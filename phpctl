@@ -164,6 +164,17 @@ function getOsData() {
   totalMemory=$(free -m | awk 'NR==2{print $3/$2*100}' | xargs printf "%.0f")
   echo "$totalCpu" "$totalMemory"
 }
+
+function getOptionValue() {
+  # Options
+  # shellcheck disable=SC2034
+  IFS='=' read -r key value <<<"${1:2}"
+  if [ "$value" == "" ]; then
+    value=true
+  fi
+  echo "$value"
+}
+
 function instantOs() {
 
   read -r totalCpu totalMemory <<<"$(getOsData)"
@@ -173,55 +184,97 @@ function instantOs() {
 
 }
 
-function freeResource() {
+function control() {
 
-  echo "Free memory"
+  kill=false
+  continuous=once
+  for arg in "$@"; do
+    case "$arg" in
+    --loop)
+      continuous=loop
+      ;;
+    --kill)
+      kill=true
+      ;;
+    *) ;;
+    esac
+    shift
+  done
 
-  output=$(top -b -n 1 | grep "php-fpm" | awk '{print $1,$9,$10}')
-  OLD_IFS=$IFS
-  IFS=$'\n'
-  counter=0
-  mainPid=$(systemctl show -p MainPID php-fpm | awk -F= '{print $2}')
-  json=$(curl -s 'http://localhost/php-status?full&json')
-  while IFS=" " read -r pid cpu mem; do
+  maximumMemory=80
+  sleep=0.5
+  while :; do
+    echo "Control Running Processes ($continuous of $sleep where killing is $kill with max memory $maximumMemory)"
+    read -r totalCpu totalMemory <<<"$(getOsData)"
+    echo "Total Cpu: $totalCpu, Memory: $totalMemory"
+    printf "Pid      Cpu  Mem  Url\n"
+    output=$(top -b -n 1 | grep "php-fpm" | awk '{print $1,$9,$10}')
+    OLD_IFS=$IFS
+    IFS=$'\n'
+    counter=0
+    mainPid=$(systemctl show -p MainPID php-fpm | awk -F= '{print $2}')
+    json=$(curl -s 'http://localhost/php-status?full&json')
+    while IFS=" " read -r pid cpu mem; do
 
-    phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid) | \"\(.\"state\") \(.\"request uri\")\"")
-    IFS=" " read -r state requestUri <<<"$phpStatus"
-    if [ "$pid" != "$mainPid" ]; then
-      if [ "$state" == "Running" ]; then
-        extraSubject="$pid (Origin: stat, Cpu: $cpu, Mem: $mem)"
-        echo "kill $pid $extraSubject"
-        # killPhpFpm "$pid" "$extraSubject"
+      phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid) | \"\(.\"state\") \(.\"request uri\")\"")
+      IFS=" " read -r state requestUri <<<"$phpStatus"
+      if [ "$pid" != "$mainPid" ]; then
+        if [[ "$state" == "Running" ]] && [[ ! "$requestUri" =~ '/php-status' ]]; then
+          extraSubject="$pid (Origin: stat, Cpu: $cpu, Mem: $mem)"
+          printf "%-8s %-4s %-4s %s\n" "$pid" "$cpu" "$mem" "$requestUri"
+          if [[ $kill == true && $totalMemory -gt $maximumMemory && "$requestUri" =~ '/lib/exe/taskrunner' ]]; then
+            killPhpFpm "$pid" "$extraSubject"
+          fi
+        fi
       fi
+
+    done <<<"$output"
+    IFS=$OLD_IFS
+
+    if [[ $continuous != 'loop' ]]; then
+      echo "Not a continuous monitoring ($continuous), break"
+      break
     fi
-
-  done <<<"$output"
-  IFS=$OLD_IFS
-
+    sleep $sleep
+    clear
+  done
 }
 
 function monitor() {
 
-  echo options: "${#OPTIONS[*]}" "${OPTIONS[@]}" "${!OPTIONS[@]}"
+  kill=false
   continuous=once
-  if [ "${OPTIONS['loop']}" == true ]; then
-    continuous='loop'
-  fi
-
   type='summary'
-  if [ "${OPTIONS['list']}" == true ]; then
-    type='list'
-  fi
+  maximumMemory=80
+  for arg in "$@"; do
+    case "$arg" in
+    --loop)
+      continuous=loop
+      ;;
+    --kill)
+      kill=true
+      ;;
+    --list)
+      type='list'
+      ;;
+    --max=*)
+      maximumMemory=$(getOptionValue "$arg")
+      ;;
+    *) ;;
+    esac
+    shift
+  done
 
-  echo "Executing Monitor $continuous in a $type report"
+
+  echo "Executing Monitor $continuous in a $type report "
 
   while :; do
 
     read -r totalCpu totalMemory <<<"$(getOsData)"
 
-    if [[ $totalMemory -gt 80 ]]; then
-      echo "Total Memory critical ($totalMemory), killing"
-      freeResource
+    if [[ $totalMemory -gt $maximumMemory ]]; then
+      echo "Total Memory is critical ($totalMemory), killing"
+      control --kill
     else
       echo "Total Memory ($totalMemory), Total Cpu ($totalCpu) not critical"
       if [ "$type" == 'list' ]; then
@@ -253,26 +306,20 @@ function print_usage() {
   echo "     * ls - list the processes"
   echo "     * info \$pid - list the info for the pid \$pid"
   echo "     * kill \$pid [subject]- kill the pid \$pid and send an email to root"
-  echo "     * monitor [--loop] [--list] - monitor the os and kill if necessary (run once by default or in loop, show a summary by default or a list)"
+  echo "     * monitor [--loop] [--list] [--max=xxx]- monitor the os and kill if necessary (run once by default or in loop, show a summary by default or a list)"
   echo "     * stat [kill] - returns average Cpu and memory over the last 3 seconds. Kill if needed"
-
+  echo "     * control [--loop] [--kill] - list the running process, the kill options will kill the task runners if the memory is critical"
   echo ""
 
 }
 
 processName="php-fpm"
-declare -A OPTIONS
+declare -a OPTIONS
 # Parsing
-while [[ $# -gt 0 ]]; do
-  case "$1" in
+for arg in "$@"; do
+  case "$arg" in
   --*)
-    # Options
-    IFS='=' read -r key value <<<"${1:2}"
-    if [ "$value" == "" ]; then
-      value=true
-    fi
-    OPTIONS[$key]=$value
-    echo "Option ($key) found with the value (${OPTIONS[$key]})"
+    OPTIONS+=("$arg")
     shift
     ;;
   *)
@@ -303,19 +350,19 @@ list)
   listReport
   ;;
 stat)
-  statReport "$@"
+  statReport "${OPTIONS[@]}"
   ;;
 monitor)
-  monitor "$@"
+  monitor "${OPTIONS[@]}"
   ;;
 info)
-  infoReport "$@"
+  infoReport "${OPTIONS[@]}"
   ;;
 kill)
-  killPhpFpm "$@"
+  killPhpFpm "${OPTIONS[@]}"
   ;;
-free)
-  freeResource
+control)
+  control "${OPTIONS[@]}"
   ;;
 help)
   print_usage
