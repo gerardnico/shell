@@ -74,8 +74,10 @@ function killPhpFpm() {
 function statReport() {
 
   kill='false'
-  if [ -n "$1" ]; then
-    kill=$1
+  if [ "${OPTIONS['kill']}" != '' ]; then
+    kill=${OPTIONS['kill']}
+  else
+    kill='false'
   fi
 
   echo "List of $processName processes (kill: $kill)"
@@ -132,11 +134,17 @@ function listReport() {
 
 function infoReport() {
 
-  if [ -z "$1" ]; then
-    echo_err 'The Pid should be given as first argument'
-    exit 1
+  option='pid'
+  if [ "${OPTIONS[$option]}" != '' ]; then
+    pid=${OPTIONS[$option]}
+  else
+    if [ -z "$1" ]; then
+      echo_err 'The Pid should be given as first argument'
+      exit 1
+    fi
+    pid=$1
   fi
-  pid=$1
+
   echo "Info report for the pid $pid"
   # -b: Batch mode operation and -n: Number of iterations.
   read -r cpu mem <<<"$(top -b -n 1 -p "$pid" | awk 'NR>7 {print $9,$10}')"
@@ -165,9 +173,9 @@ function instantOs() {
 
 }
 
-function killAll() {
+function freeResource() {
 
-  echo "List of $processName processes"
+  echo "Free memory"
 
   output=$(top -b -n 1 | grep "php-fpm" | awk '{print $1,$9,$10}')
   OLD_IFS=$IFS
@@ -182,7 +190,8 @@ function killAll() {
     if [ "$pid" != "$mainPid" ]; then
       if [ "$state" == "Running" ]; then
         extraSubject="$pid (Origin: stat, Cpu: $cpu, Mem: $mem)"
-        killPhpFpm "$pid" "$extraSubject"
+        echo "kill $pid $extraSubject"
+        # killPhpFpm "$pid" "$extraSubject"
       fi
     fi
 
@@ -193,23 +202,28 @@ function killAll() {
 
 function monitor() {
 
+  echo options: "${#OPTIONS[*]}" "${OPTIONS[@]}" "${!OPTIONS[@]}"
   continuous=once
-  if [ -n "$1" ]; then
-    continuous=$1
+  if [ "${OPTIONS['loop']}" == true ]; then
+    continuous='loop'
   fi
+
   type='summary'
-  if [ -n "$2" ]; then
-    type=$2
+  if [ "${OPTIONS['list']}" == true ]; then
+    type='list'
   fi
+
+  echo "Executing Monitor $continuous in a $type report"
+
   while :; do
 
     read -r totalCpu totalMemory <<<"$(getOsData)"
 
     if [[ $totalMemory -gt 80 ]]; then
       echo "Total Memory critical ($totalMemory), killing"
-      killAll
+      freeResource
     else
-      echo "Total Memory ($totalMemory) not critical"
+      echo "Total Memory ($totalMemory), Total Cpu ($totalCpu) not critical"
       if [ "$type" == 'list' ]; then
         listReport
       fi
@@ -233,13 +247,13 @@ function print_usage() {
   echo ""
   echo "Usage of the cli ${CLI_NAME}"
   echo ""
-  echo "   ${CLI_NAME} command"
+  echo "   ${CLI_NAME} command [--option[=value] ...]"
   echo ""
   echo "where command is one of:"
   echo "     * ls - list the processes"
   echo "     * info \$pid - list the info for the pid \$pid"
   echo "     * kill \$pid [subject]- kill the pid \$pid and send an email to root"
-  echo "     * monitor [loop|once] [summary|list] - monitor the os and kill if necessary (run once or in loop, show a summary or a list)"
+  echo "     * monitor [--loop] [--list] - monitor the os and kill if necessary (run once by default or in loop, show a summary by default or a list)"
   echo "     * stat [kill] - returns average Cpu and memory over the last 3 seconds. Kill if needed"
 
   echo ""
@@ -247,8 +261,28 @@ function print_usage() {
 }
 
 processName="php-fpm"
-COMMAND=$1
-shift
+declare -A OPTIONS
+# Parsing
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --*)
+    # Options
+    IFS='=' read -r key value <<<"${1:2}"
+    if [ "$value" == "" ]; then
+      value=true
+    fi
+    OPTIONS[$key]=$value
+    echo "Option ($key) found with the value (${OPTIONS[$key]})"
+    shift
+    ;;
+  *)
+    # Command
+    COMMAND=$1
+    echo "Command ($COMMAND) found"
+    shift
+    ;;
+  esac
+done
 
 if [ -z "$COMMAND" ]; then
   echo 'No command was given, list chosen.'
@@ -278,12 +312,10 @@ info)
   infoReport "$@"
   ;;
 kill)
-  # shellcheck disable=SC2086
   killPhpFpm "$@"
   ;;
-killAll)
-  # shellcheck disable=SC2086
-  killAll
+free)
+  freeResource
   ;;
 help)
   print_usage
