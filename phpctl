@@ -156,6 +156,17 @@ function infoReport() {
 
 }
 
+function lock() {
+
+  cd /opt/www/datacadamia.com/dokudata/locks || exit 1
+  while :; do
+    ls -A1
+    sleep 0.1
+    clear
+  done
+
+}
+
 function getOsData() {
   # CPU_Util = (user+system+nice+softirq+steal)/ (user+system+nice+softirq+steal+idle+iowait)
   # see also mpstat
@@ -186,34 +197,79 @@ function instantOs() {
 
 function control() {
 
-  kill=false
-  continuous=once
+  kill=false       # do we need to kill
+  service=false    # run in a service mode
+  loop=false       # run in loop or once
+  maximumMemory=80 # maximum memory
+  sleep=0.5        # wait time in seconds
+  report=list      # doe we see the details
   for arg in "$@"; do
     case "$arg" in
     --loop)
-      continuous=loop
+      loop=true
+      ;;
+    --list)
+      report=list
       ;;
     --kill)
       kill=true
       ;;
-    *) ;;
+    --service)
+      service=true
+      loop=true
+      sleep=5
+      kill=true
+      report=summary
+      ;;
+    --sleep*)
+      sleep=$(getOptionValue "$arg")
+      ;;
+    --max*)
+      maximumMemory=$(getOptionValue "$arg")
+      ;;
+    *)
+      echo_err "Unknown option $arg"
+      exit 1
+      ;;
     esac
     shift
   done
-
-  maximumMemory=80
-  sleep=0.5
+  counter=0
+  header="Control Running Processes (loop: $loop of $sleep sec where killing is $kill with max memory $maximumMemory)"
+  echo "$header"
   while :; do
-    echo "Control Running Processes ($continuous of $sleep where killing is $kill with max memory $maximumMemory)"
+
+    # Header report
     read -r totalCpu totalMemory <<<"$(getOsData)"
-    echo "Total Cpu: $totalCpu, Memory: $totalMemory"
-    printf "Pid      Cpu  Mem  Url\n"
+    if [ $service == false ]; then
+      echo "Total Cpu: $totalCpu, Memory: $totalMemory"
+    fi
+
+    # We sleep at the beginning as if there is an error,
+    # we use `continue` to stop the loop processing
+    sleep "$sleep"
+
+    # Sort of service state
+    if [[ $report != 'list' && $totalMemory -lt $maximumMemory && $loop == true ]]; then
+      continue
+    fi
+
+    # List reporting
+    if [ $service == false ]; then
+      printf "Pid      Cpu  Mem  Url\n"
+    fi
     output=$(top -b -n 1 | grep "php-fpm" | awk '{print $1,$9,$10}')
     OLD_IFS=$IFS
     IFS=$'\n'
-    counter=0
     mainPid=$(systemctl show -p MainPID php-fpm | awk -F= '{print $2}')
-    json=$(curl -s 'http://localhost/php-status?full&json')
+
+    phpStatusResponse=$(curl -s -w "\n%{http_code}" 'http://localhost/php-status?full&json')
+    phpHttpStatus=${phpStatusResponse: -3} # the space is important
+    if [ "$phpHttpStatus" != '200' ]; then
+      echo_err "Php Status returned a bad response: $phpHttpStatus"
+      continue
+    fi
+    json=${phpStatusResponse:0:-4} # all but the last 4 digits
     while IFS=" " read -r pid cpu mem; do
 
       phpStatus=$(echo "$json" | jq --raw-output ".processes[] | select(.pid == $pid) | \"\(.\"state\") \(.\"request uri\")\"")
@@ -221,7 +277,9 @@ function control() {
       if [ "$pid" != "$mainPid" ]; then
         if [[ "$state" == "Running" ]] && [[ ! "$requestUri" =~ '/php-status' ]]; then
           extraSubject="$pid (Origin: stat, Cpu: $cpu, Mem: $mem)"
-          printf "%-8s %-4s %-4s %s\n" "$pid" "$cpu" "$mem" "$requestUri"
+          if [ $service == false ]; then
+            printf "%-8s %-4s %-4s %s\n" "$pid" "$cpu" "$mem" "$requestUri"
+          fi
           if [[ $kill == true && $totalMemory -gt $maximumMemory && "$requestUri" =~ '/lib/exe/taskrunner' ]]; then
             killPhpFpm "$pid" "$extraSubject"
           fi
@@ -231,12 +289,16 @@ function control() {
     done <<<"$output"
     IFS=$OLD_IFS
 
-    if [[ $continuous != 'loop' ]]; then
+    if [ $service == false ]; then
+      # not sure if the test is needed with clear in service mode
+      clear
+    fi
+
+    if [[ $loop == false ]]; then
       echo "Not a continuous monitoring ($continuous), break"
       break
     fi
-    sleep $sleep
-    clear
+
   done
 }
 
@@ -264,7 +326,6 @@ function monitor() {
     esac
     shift
   done
-
 
   echo "Executing Monitor $continuous in a $type report "
 
@@ -363,6 +424,9 @@ kill)
   ;;
 control)
   control "${OPTIONS[@]}"
+  ;;
+lock)
+  lock "${OPTIONS[@]}"
   ;;
 help)
   print_usage

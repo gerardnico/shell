@@ -19,3 +19,10 @@ export GITCS_CONF=/mnt/d/code/shell-gh/gitcs.csv
 ```bash
 export GITCS_HOME=/opt/www/git
 ```
+
+* Global Credential
+```
+credential.helper=store
+credential.usehttppath=true
+```
+
